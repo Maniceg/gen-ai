@@ -1,0 +1,162 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "authorship_tag": "ABX9TyO9akHpQAtE0uCvBtgnbHD1",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Maniceg/gen-ai/blob/main/youtube%20summerizer\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 37,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 819
+        },
+        "id": "M-IxpR884xMd",
+        "outputId": "c6c34ded-ab18-45d3-9a50-8bd176232794"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Device set to use cpu\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Enter a YouTube video URL: https://youtu.be/6uUblznfrsk?si=2gkFqSh8oCvWQZCI\n",
+            "📥 Fetching transcript...\n",
+            "🔗 Chunking and embedding...\n",
+            "🔎 Retrieving relevant chunks...\n",
+            "🧠 Summarizing...\n",
+            "\n",
+            "🎬 Summary:\n",
+            "\n",
+            "\"Our core purpose has changed we recognize that as we became transnational we needed a more Global and a more inclusive rallying cry now our purpose our core purposes almost as compact it is to drive positive change in the lives of our communities to enable them to rise and we often encapsulate that in just the one single word rise now how that Credo precisely evolved is a longer story but let me tell you that if you asked any one of our 250,000 strong Global family what it is that differentiates our company they will say it's our purpose. and I think that pretty much sums up your present and your future you are all pilgrims who in the course of your careers will wander through an Uncharted world may you wander through it with purpose\"\n",
+            "It looks like you are running Gradio on a hosted a Jupyter notebook. For the Gradio app to work, sharing must be enabled. Automatically setting `share=True` (you can turn this off by setting `share=False` in `launch()` explicitly).\n",
+            "\n",
+            "Colab notebook detected. To show errors in colab notebook, set debug=True in launch()\n",
+            "* Running on public URL: https://1e8a8dbcc1c9112520.gradio.live\n",
+            "\n",
+            "This share link expires in 1 week. For free permanent hosting and GPU upgrades, run `gradio deploy` from the terminal in the working directory to deploy to Hugging Face Spaces (https://huggingface.co/spaces)\n"
+          ]
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<IPython.core.display.HTML object>"
+            ],
+            "text/html": [
+              "<div><iframe src=\"https://1e8a8dbcc1c9112520.gradio.live\" width=\"100%\" height=\"500\" allow=\"autoplay; camera; microphone; clipboard-read; clipboard-write;\" frameborder=\"0\" allowfullscreen></iframe></div>"
+            ]
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": []
+          },
+          "metadata": {},
+          "execution_count": 37
+        }
+      ],
+      "source": [
+        "# ✅ Install Required Packages\n",
+        "# !pip install youtube-transcript-api langchain langchain-community faiss-cpu sentence-transformers transformers gradio\n",
+        "# ✅ Imports\n",
+        "from youtube_transcript_api import YouTubeTranscriptApi\n",
+        "from langchain_community.vectorstores import FAISS\n",
+        "from langchain_community.embeddings import SentenceTransformerEmbeddings\n",
+        "from langchain.text_splitter import RecursiveCharacterTextSplitter\n",
+        "from transformers import pipeline\n",
+        "import gradio as gr\n",
+        "import re\n",
+        "\n",
+        "# ✅ Get YouTube Transcript\n",
+        "def extract_video_id(url):\n",
+        "    match = re.search(r\"(?:v=|\\/)([0-9A-Za-z_-]{11})\", url)\n",
+        "    return match.group(1) if match else None\n",
+        "\n",
+        "def get_transcript(url):\n",
+        "    video_id = extract_video_id(url)\n",
+        "    if not video_id:\n",
+        "        raise ValueError(\"Invalid YouTube URL\")\n",
+        "    transcript = YouTubeTranscriptApi.get_transcript(video_id)\n",
+        "    return \" \".join([entry[\"text\"] for entry in transcript])\n",
+        "\n",
+        "# ✅ Summarizer pipeline (HuggingFace, free to use)\n",
+        "summarizer = pipeline(\"summarization\", model=\"facebook/bart-large-cnn\")\n",
+        "\n",
+        "# ✅ Main Function\n",
+        "def summarize_youtube_video(url):\n",
+        "    try:\n",
+        "        print(\"📥 Fetching transcript...\")\n",
+        "        transcript = get_transcript(url)\n",
+        "\n",
+        "        print(\"🔗 Chunking and embedding...\")\n",
+        "        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)\n",
+        "        docs = splitter.create_documents([transcript])\n",
+        "\n",
+        "        embeddings = SentenceTransformerEmbeddings(model_name=\"all-MiniLM-L6-v2\")\n",
+        "        vectordb = FAISS.from_documents(docs, embeddings)\n",
+        "\n",
+        "        print(\"🔎 Retrieving relevant chunks...\")\n",
+        "        retriever = vectordb.as_retriever()\n",
+        "        relevant_docs = retriever.get_relevant_documents(\"Summarize this video in detail\")\n",
+        "\n",
+        "        context = \" \".join([doc.page_content for doc in relevant_docs])\n",
+        "\n",
+        "        print(\"🧠 Summarizing...\")\n",
+        "        summary = summarizer(context, max_length=300, min_length=80, do_sample=False)[0][\"summary_text\"]\n",
+        "        return summary\n",
+        "    except Exception as e:\n",
+        "        return f\"❌ Error: {e}\"\n",
+        "\n",
+        "# ✅ Option 1: Terminal/Colab Input\n",
+        "video_url = input(\"Enter a YouTube video URL: \")\n",
+        "summary = summarize_youtube_video(video_url)\n",
+        "print(\"\\n🎬 Summary:\\n\")\n",
+        "print(summary)\n",
+        "\n",
+        "# ✅ Option 2: Gradio Interface\n",
+        "def gradio_interface(url):\n",
+        "    return summarize_youtube_video(url)\n",
+        "\n",
+        "gr.Interface(\n",
+        "    fn=gradio_interface,\n",
+        "    inputs=gr.Textbox(label=\"YouTube Video URL\"),\n",
+        "    outputs=gr.Textbox(label=\"Video Summary\"),\n",
+        "    title=\"🎬 YouTube Video Summarizer (RAG + LangChain)\",\n",
+        "    description=\"Summarize YouTube videos using HuggingFace + LangChain (No API key needed)\",\n",
+        ").launch()\n"
+      ]
+    }
+  ]
+}
